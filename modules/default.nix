@@ -36,31 +36,32 @@ let
     } // extraSpecialArgs;
   };
 
-  module = showWarnings (
-    let
-      failed = collectFailed rawModule.config;
-      failedStr = concatStringsSep "\n" (map (x: "- ${x}") failed);
-    in
-      if failed == []
-      then rawModule
-      else throw "\nFailed assertions:\n${failedStr}"
-  );
+  moduleChecks = raw: showWarnings (let
+    failed = collectFailed raw.config;
+    failedStr = concatStringsSep "\n" (map (x: "- ${x}") failed);
+  in if failed == [ ] then
+    raw
+  else
+    throw ''
+      Failed assertions:
+      ${failedStr}'');
 
-in
+  withExtraAttrs = rawModule: let
+    module = moduleChecks rawModule;
+  in {
+    inherit (module) options config;
 
-{
-  inherit (module) options config;
+    activationPackage = module.config.home.activationPackage;
 
-  activationPackage = module.config.home.activationPackage;
+    # For backwards compatibility. Please use activationPackage instead.
+    activation-script = module.config.home.activationPackage;
 
-  # For backwards compatibility. Please use activationPackage instead.
-  activation-script = module.config.home.activationPackage;
+    newsDisplay = rawModule.config.news.display;
+    newsEntries = sort (a: b: a.time > b.time)
+      (filter (a: a.condition) rawModule.config.news.entries);
 
-  newsDisplay = rawModule.config.news.display;
-  newsEntries =
-    sort (a: b: a.time > b.time) (
-      filter (a: a.condition) rawModule.config.news.entries
-    );
+    inherit (module._module.args) pkgs;
 
-  inherit (module._module.args) pkgs;
-}
+    extendModules = args: withExtraAttrs (rawModule.extendModules args);
+  };
+in withExtraAttrs rawModule
